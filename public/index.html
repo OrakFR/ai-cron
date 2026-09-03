@@ -285,7 +285,7 @@ const state = { jobs: [], editingId: null, providers: {} };
 
 const PROVIDER_SUBTITLES = {
   claude: 'scheduled <code>claude -p</code> jobs, run via pm2',
-  chatgpt: 'scheduled ChatGPT jobs, run via pm2 - needs <code>OPENAI_API_KEY</code> set',
+  chatgpt: 'scheduled ChatGPT jobs, run via pm2 - needs <code>codex login</code> (or <code>OPENAI_API_KEY</code>)',
 };
 document.getElementById("sub-text").innerHTML =
   PROVIDER_SUBTITLES[CURRENT_PROVIDER] || `scheduled ${escapeHtml(CURRENT_PROVIDER)} jobs, run via pm2`;

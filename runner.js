@@ -54,11 +54,67 @@ function callClaude(job, prompt) {
   );
 }
 
-async function callChatGPT(job, prompt) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return { error: new Error("OPENAI_API_KEY is not set in the environment"), stdout: "", stderr: "" };
+// Preferred path for a ChatGPT job: the Codex CLI's own `codex login` (OAuth,
+// browser-based) bills against the user's ChatGPT Plus/Team/Enterprise plan
+// entitlement, not a separate API key - the only option for someone on a
+// company seat with API-key issuance locked down. Credentials live in
+// ~/.codex/auth.json and Codex refreshes them itself; nothing here touches
+// that file. `codex exec --json` streams JSON Lines events; the pieces used
+// here: `item.completed` / item.type "agent_message" for the reply text,
+// `turn.completed` for token usage, `turn.failed` for errors.
+// https://learn.chatgpt.com/docs/auth?surface=app / https://learn.chatgpt.com/codex/non-interactive-mode
+function callChatGPTViaCodex(job, prompt) {
+  const args = ["exec", "--json", "--sandbox", "read-only", "--skip-git-repo-check"];
+  if (job.model) args.push("--model", job.model);
+  args.push("--", prompt);
+  const proc = spawnSync("codex", args, {
+    cwd: job.cwd,
+    timeout: job.timeoutMs || 600000,
+    maxBuffer: 50 * 1024 * 1024,
+    encoding: "utf8",
+  });
+  if (proc.error) return proc; // ENOENT (codex not installed) decides fallback in callChatGPT
+
+  let resultText = "";
+  let usage;
+  let failMsg = null;
+  for (const line of (proc.stdout || "").split("\n")) {
+    if (!line.trim()) continue;
+    let evt;
+    try {
+      evt = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (evt.type === "item.completed" && evt.item?.type === "agent_message" && evt.item.text) {
+      resultText = evt.item.text;
+    } else if (evt.type === "turn.completed" && evt.usage) {
+      usage = {
+        input_tokens: evt.usage.input_tokens,
+        output_tokens: evt.usage.output_tokens,
+        cache_read_input_tokens: evt.usage.cached_input_tokens || 0,
+      };
+    } else if (evt.type === "turn.failed" || evt.type === "error") {
+      failMsg = evt.error || evt.message || JSON.stringify(evt);
+    }
   }
+
+  const isError = proc.status !== 0 || !!failMsg || !resultText;
+  const synthetic = {
+    result: isError ? failMsg || proc.stderr || `codex exec exited with status ${proc.status}` : resultText,
+    total_cost_usd: null,
+    usage,
+    is_error: isError,
+  };
+  return { error: null, stdout: JSON.stringify(synthetic), stderr: proc.stderr };
+}
+
+// Fallback for anyone who does have API key access (or prefers pay-per-token
+// billing over their ChatGPT plan). Tried only when the Codex CLI itself
+// isn't installed - if it IS installed but errors (not logged in, etc.),
+// that error is surfaced directly rather than silently swallowed here.
+async function callChatGPTViaApiKey(job, prompt) {
+  const apiKey = process.env.OPENAI_API_KEY;
   const model = job.model || "gpt-4o-mini";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), job.timeoutMs || 600000);
@@ -96,6 +152,25 @@ async function callChatGPT(job, prompt) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function callChatGPT(job, prompt) {
+  const codexResult = callChatGPTViaCodex(job, prompt);
+  const codexNotInstalled = codexResult.error && codexResult.error.code === "ENOENT";
+  if (!codexNotInstalled) return codexResult;
+
+  if (process.env.OPENAI_API_KEY) {
+    return callChatGPTViaApiKey(job, prompt);
+  }
+  return {
+    error: new Error(
+      "No ChatGPT auth available: install the Codex CLI and run `codex login` " +
+        "(uses your ChatGPT plan, no API key needed - the right option on a " +
+        "company seat that can't issue API keys), or set OPENAI_API_KEY."
+    ),
+    stdout: "",
+    stderr: "",
+  };
 }
 
 function writeOutput(job, resultText) {

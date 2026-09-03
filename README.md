@@ -16,12 +16,17 @@ with something small, dependency-free, and easy to reason about.
   to inline, where to write the output. Not committed (see Setup) - copy
   `manifest.example.json` to get started.
 - **`runner.js`** - executes one job: inlines `context_files` into the prompt, calls the
-  job's provider (`EXECUTORS` map - `claude` shells out to `claude -p --restricted
-  --output-format json`; `chatgpt` calls the OpenAI chat-completions API directly over
-  `fetch`, no SDK), writes the result per the job's `output.mode` (`none` /
-  `append_log` / `overwrite_file`, the latter keeping a `.bak`), logs the full run to
-  `logs/`. An optional per-job `model` is passed through to either provider
-  (`--model` for claude, the API `model` field for chatgpt).
+  job's provider (`EXECUTORS` map), writes the result per the job's `output.mode`
+  (`none` / `append_log` / `overwrite_file`, the latter keeping a `.bak`), logs the full
+  run to `logs/`. An optional per-job `model` is passed through to whichever provider
+  runs it.
+  - `claude` shells out to `claude -p --restricted --output-format json`.
+  - `chatgpt` tries the [Codex CLI](https://learn.chatgpt.com/docs/auth?surface=app)
+    first (`codex exec --json --sandbox read-only`) - `codex login` is an OAuth flow
+    that bills against your ChatGPT Plus/Team/Enterprise plan, not a separate API key,
+    which is the only option on a company seat where API-key issuance is locked down.
+    If Codex isn't installed, it falls back to a raw call to OpenAI's
+    chat-completions API via `OPENAI_API_KEY` (no SDK, just `fetch`).
 - **`server.js`** - the dashboard (`:47890`, configurable via `AI_CRON_PORT`). View jobs,
   toggle enabled, run on demand, view logs, add/edit/delete. Keeps pm2 in sync with
   `manifest.json` (jobs are scheduled as `pm2 start ... --cron-restart "<schedule>"
@@ -68,9 +73,11 @@ No external dependencies - everything runs on Node's built-in `http`/`fs`/`child
    ```
    On Linux, run `watchdog.js` under systemd (`Restart=always`) instead.
 
-5. **For ChatGPT jobs**, set `OPENAI_API_KEY` in the environment the pm2 daemon runs
-   under (e.g. export it before `pm2 start`, or add it to the daemon's own launchd
-   plist). Claude jobs use your existing `claude login` session instead - no key needed.
+5. **For ChatGPT jobs**, [install the Codex CLI](https://learn.chatgpt.com/docs/auth?surface=app)
+   and run `codex login` (browser-based, uses your ChatGPT plan - the option for a
+   company seat with no API key access). Don't have Codex or prefer pay-per-token
+   billing? Set `OPENAI_API_KEY` in the environment the pm2 daemon runs under instead.
+   Claude jobs use your existing `claude login` session either way - no key needed.
 
 6. Open `http://localhost:47890` (redirects to `/claude`). Bookmark
    `http://localhost:47891` too - that one works even when the dashboard is down.
