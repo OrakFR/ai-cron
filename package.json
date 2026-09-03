@@ -1,0 +1,15 @@
+{
+  "name": "ai-cron",
+  "version": "1.0.0",
+  "description": "Scheduled claude -p jobs, run via pm2, with a dashboard and a watchdog that survives the daemon going down.",
+  "license": "MIT",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "watchdog": "node watchdog.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

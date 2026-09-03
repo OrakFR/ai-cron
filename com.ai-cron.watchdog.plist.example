@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.ai-cron.watchdog</string>
+    <!-- Replace YOUR_USERNAME below, and the two /path/to/... entries with
+         absolute paths to your `node` binary and this repo's watchdog.js. -->
+    <key>UserName</key>
+    <string>YOUR_USERNAME</string>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ProgramArguments</key>
+    <array>
+      <string>/path/to/node</string>
+      <string>/path/to/ai-cron/watchdog.js</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/path/to/ai-cron/logs/watchdog-out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/ai-cron/logs/watchdog-err.log</string>
+  </dict>
+</plist>

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Cron</title>
+<style>
+  :root {
+    --bg: #0e0f12;
+    --panel: #17181d;
+    --panel-2: #1e2027;
+    --border: #2a2c34;
+    --text: #e6e6ea;
+    --text-dim: #8a8c98;
+    --accent: #6ea8fe;
+    --ok: #4ade80;
+    --fail: #f87171;
+    --idle: #6b6d78;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, monospace;
+    font-size: 14px;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+  header .sub {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .banner {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 28px;
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .banner.show { display: flex; }
+  .banner.warn { background: rgba(248,113,113,0.1); color: var(--fail); }
+  .banner button { font-size: 12px; padding: 5px 10px; }
+  .provider-tabs { display: flex; gap: 4px; padding: 10px 28px 0; border-bottom: 1px solid var(--border); }
+  .provider-tabs a {
+    color: var(--text-dim); text-decoration: none; font-size: 13px; padding: 8px 14px;
+    border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .provider-tabs a:hover { color: var(--text); }
+  .provider-tabs a.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .provider-tabs .badge {
+    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; color: var(--text-dim);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    padding: 7px 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0e0f12; border-color: var(--accent); font-weight: 600; }
+  button.danger:hover { border-color: var(--fail); color: var(--fail); }
+  main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .card h3 { margin: 0 0 2px; font-size: 15px; }
+  .card .id { color: var(--text-dim); font-size: 11px; }
+  .card .desc { color: var(--text-dim); font-size: 12px; margin: 8px 0; line-height: 1.4; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0; font-size: 12px; color: var(--text-dim); }
+  .meta span b { color: var(--text); font-weight: 500; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    background: var(--panel-2); border: 1px solid var(--border);
+  }
+  .status-pill.success { color: var(--ok); }
+  .status-pill.failed { color: var(--fail); }
+  .status-pill.never { color: var(--idle); }
+  .status-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .actions { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+  .actions button { font-size: 12px; padding: 5px 10px; }
+  .toggle { position: relative; display: inline-block; width: 34px; height: 19px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute; inset: 0; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; transition: .15s; cursor: pointer;
+  }
+  .toggle .slider::before {
+    content: ""; position: absolute; width: 13px; height: 13px; left: 2px; top: 2px;
+    background: var(--text-dim); border-radius: 50%; transition: .15s;
+  }
+  .toggle input:checked + .slider { background: rgba(110,168,254,0.2); border-color: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(15px); background: var(--accent); }
+  .empty { color: var(--text-dim); text-align: center; padding: 60px 0; }
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 10;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 22px; width: 100%; max-width: 560px;
+  }
+  .modal h2 { margin: 0 0 16px; font-size: 16px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .field input, .field select, .field textarea {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 8px 10px; font: inherit; resize: vertical;
+  }
+  .field textarea { min-height: 70px; }
+  .field .hint { color: var(--text-dim); font-size: 11px; margin-top: 3px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .presets button { font-size: 11px; padding: 3px 8px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .log-pre {
+    background: #0a0b0d; border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+    max-height: 420px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.5;
+  }
+  .error-text { color: var(--fail); font-size: 12px; margin-top: 8px; }
+  .log-meta {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;
+    margin-bottom: 14px;
+  }
+  .log-meta .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+  .log-meta .stat .label { color: var(--text-dim); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .log-meta .stat .value { font-size: 13px; font-weight: 600; margin-top: 2px; }
+  .log-meta .stat.status-success .value { color: var(--ok); }
+  .log-meta .stat.status-failed .value { color: var(--fail); }
+  .log-error-box {
+    background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.35); color: var(--fail);
+    border-radius: 6px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 14px; white-space: pre-wrap;
+  }
+  .log-section-title { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; margin: 0 0 6px; }
+  .log-result {
+    background: #0a0b0d; border: 1px solid var(--border); border-radius: 6px; padding: 14px;
+    max-height: 380px; overflow: auto; white-space: pre-wrap; font-size: 13px; line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .log-raw summary { cursor: pointer; font-size: 11.5px; color: var(--text-dim); margin-bottom: 8px; }
+  .log-raw summary:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>AI Cron</h1>
+    <div class="sub">
+      <span id="sub-text"></span>
+      <button id="pm2-daemon-pill" class="status-pill never" style="margin-left:8px;cursor:pointer"><span class="dot"></span>checking pm2...</button>
+    </div>
+  </div>
+  <button class="primary" id="add-btn">+ Add Job</button>
+</header>
+
+<nav id="provider-tabs" class="provider-tabs"></nav>
+<div class="banner warn" id="provider-notready-banner">
+  <span>This provider has no executor yet - jobs will be saved but fail when run.</span>
+</div>
+
+<div class="banner warn" id="auth-banner">
+  <span>Claude CLI not connected - scheduled jobs will fail until you log in.</span>
+  <button class="primary" id="auth-connect-btn">Connect</button>
+</div>
+<div class="banner warn" id="pm2-banner">
+  <span>pm2 daemon unreachable - jobs cannot run or be scheduled. Start it in a Terminal: <code>pm2 resurrect</code></span>
+</div>
+
+<main>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" style="display:none">No jobs yet. Add one above.</div>
+</main>
+
+<div class="overlay" id="job-overlay">
+  <div class="modal">
+    <h2 id="job-modal-title">Add job</h2>
+    <div class="field">
+      <label>Name</label>
+      <input id="f-name" placeholder="e.g. Weekly changelog digest">
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <input id="f-desc" placeholder="optional, shown on the card">
+    </div>
+    <div class="field">
+      <label>Schedule (cron, 5 fields)</label>
+      <input id="f-schedule" placeholder="0 3 * * 0">
+      <div class="presets">
+        <button type="button" data-cron="0 3 * * *">daily 3am</button>
+        <button type="button" data-cron="0 3 * * 0">weekly Sun 3am</button>
+        <button type="button" data-cron="0 4 * * 1">weekly Mon 4am</button>
+        <button type="button" data-cron="0 0 1 * *">monthly 1st</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Working directory</label>
+      <input id="f-cwd" placeholder="/path/to/your/project">
+    </div>
+    <div class="field">
+      <label>Context files (one per line, relative to working directory)</label>
+      <textarea id="f-context" placeholder=".wolf/memory.md"></textarea>
+    </div>
+    <div class="field">
+      <label>Prompt</label>
+      <textarea id="f-prompt" style="min-height:110px" placeholder="What should claude do with the context above?"></textarea>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Output mode</label>
+        <select id="f-output-mode">
+          <option value="none">none (log only)</option>
+          <option value="append_log">append to file</option>
+          <option value="overwrite_file">overwrite file</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Output path (relative to cwd)</label>
+        <input id="f-output-path" placeholder=".wolf/ai-suggestions.md">
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Timeout (minutes)</label>
+        <input id="f-timeout" type="number" min="1" value="10">
+      </div>
+      <div class="field">
+        <label>Enabled</label>
+        <select id="f-enabled">
+          <option value="true">yes</option>
+          <option value="false">no</option>
+        </select>
+      </div>
+    </div>
+    <div class="error-text" id="job-error"></div>
+    <div class="modal-actions">
+      <button id="job-cancel">Cancel</button>
+      <button class="primary" id="job-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="log-overlay">
+  <div class="modal" style="max-width:760px">
+    <h2 id="log-title">Last run log</h2>
+    <div id="log-body">no log yet</div>
+    <div class="modal-actions">
+      <button id="log-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CURRENT_PROVIDER = location.pathname.replace(/^\//, "") || "claude";
+const state = { jobs: [], editingId: null, providers: {} };
+
+const PROVIDER_SUBTITLES = {
+  claude: 'scheduled <code>claude -p</code> jobs, run via pm2',
+  chatgpt: 'scheduled ChatGPT jobs, run via pm2 - no executor wired up yet',
+};
+document.getElementById("sub-text").innerHTML =
+  PROVIDER_SUBTITLES[CURRENT_PROVIDER] || `scheduled ${escapeHtml(CURRENT_PROVIDER)} jobs, run via pm2`;
+
+async function renderProviderTabs() {
+  try {
+    const data = await api("/api/providers");
+    state.providers = data.providers;
+    const nav = document.getElementById("provider-tabs");
+    nav.innerHTML = Object.entries(data.providers).map(([id, p]) => `
+      <a href="/${id}" class="${id === CURRENT_PROVIDER ? "active" : ""}">
+        ${escapeHtml(p.name)}
+        ${!p.ready ? '<span class="badge">not wired up</span>' : ""}
+      </a>
+    `).join("");
+    const current = data.providers[CURRENT_PROVIDER];
+    document.getElementById("provider-notready-banner").classList.toggle("show", !!current && !current.ready);
+  } catch {}
+}
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (res.status === 204) return null;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+
+function relTime(iso) {
+  if (!iso) return "never";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.round(hrs / 24) + "d ago";
+}
+
+function statusPill(job) {
+  const lr = job.lastRun;
+  if (!lr) return '<span class="status-pill never"><span class="dot"></span>never run</span>';
+  const cls = lr.status === "success" ? "success" : "failed";
+  const label = lr.status === "success" ? "ok" : "failed";
+  return `<span class="status-pill ${cls}"><span class="dot"></span>${label} ${relTime(lr.timestamp)}</span>`;
+}
+
+function fmtFuture(iso) {
+  const d = new Date(iso);
+  const diffMin = Math.round((d.getTime() - Date.now()) / 60000);
+  const abs = d.toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+  if (diffMin < 60) return `in ${diffMin}m (${abs})`;
+  if (diffMin < 60 * 24) return `in ${Math.round(diffMin / 60)}h (${abs})`;
+  return `in ${Math.round(diffMin / 1440)}d (${abs})`;
+}
+
+function pm2Pill(job) {
+  if (!job.pm2) {
+    if (!job.enabled) return '<span class="status-pill never"><span class="dot"></span>disabled</span>';
+    return '<span class="status-pill failed"><span class="dot"></span>not scheduled</span>';
+  }
+  if (job.pm2.status === "errored") {
+    return '<span class="status-pill failed"><span class="dot"></span>schedule crashed</span>';
+  }
+  if (job.pm2.status === "online") {
+    return '<span class="status-pill success"><span class="dot"></span>running now</span>';
+  }
+  if (job.nextFireAt) {
+    return `<span class="status-pill success"><span class="dot"></span>scheduled - next ${fmtFuture(job.nextFireAt)}</span>`;
+  }
+  return '<span class="status-pill never"><span class="dot"></span>scheduled</span>';
+}
+
+function renderJobs() {
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  grid.innerHTML = "";
+  empty.style.display = state.jobs.length ? "none" : "block";
+
+  for (const job of state.jobs) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="card-top">
+        <div>
+          <h3>${escapeHtml(job.name)}</h3>
+          <div class="id">${escapeHtml(job.id)}</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" ${job.enabled ? "checked" : ""} data-toggle="${job.id}">
+          <span class="slider"></span>
+        </label>
+      </div>
+      ${job.description ? `<div class="desc">${escapeHtml(job.description)}</div>` : ""}
+      <div class="meta">
+        <span>cron <b>${escapeHtml(job.schedule)}</b></span>
+        <span>cwd <b>${escapeHtml(shortenPath(job.cwd))}</b></span>
+        ${job.lastRun && job.lastRun.costUsd != null ? `<span>cost <b>$${job.lastRun.costUsd.toFixed(3)}</b></span>` : ""}
+      </div>
+      <div class="meta">
+        ${statusPill(job)}
+        ${pm2Pill(job)}
+      </div>
+      <div class="actions">
+        <button data-run="${job.id}">Run now</button>
+        <button data-log="${job.id}">View log</button>
+        <button data-edit="${job.id}">Edit</button>
+        <button class="danger" data-delete="${job.id}">Delete</button>
+        ${job.enabled && (!job.pm2 || job.pm2.status === "errored")
+          ? `<button data-pm2sync="${job.id}">${job.pm2 ? "Restart schedule" : "Schedule"}</button>`
+          : ""}
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function shortenPath(p) {
+  return p.replace(/^\/Users\/[^/]+/, "~");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+async function refresh() {
+  const data = await api("/api/jobs");
+  state.jobs = data.jobs.filter((j) => (j.provider || "claude") === CURRENT_PROVIDER);
+  renderJobs();
+}
+
+document.getElementById("grid").addEventListener("click", async (e) => {
+  const runId = e.target.dataset.run;
+  const logId = e.target.dataset.log;
+  const editId = e.target.dataset.edit;
+  const deleteId = e.target.dataset.delete;
+  const pm2syncId = e.target.dataset.pm2sync;
+
+  if (pm2syncId) {
+    e.target.textContent = "syncing...";
+    e.target.disabled = true;
+    await api(`/api/jobs/${encodeURIComponent(pm2syncId)}/pm2-sync`, { method: "POST" });
+    refresh();
+  }
+
+  if (runId) {
+    e.target.textContent = "running...";
+    e.target.disabled = true;
+    await api(`/api/jobs/${encodeURIComponent(runId)}/run`, { method: "POST" });
+    setTimeout(refresh, 1500);
+  }
+  if (logId) openLog(logId);
+  if (editId) openEdit(editId);
+  if (deleteId) {
+    if (e.target.dataset.confirmed) {
+      await api(`/api/jobs/${encodeURIComponent(deleteId)}`, { method: "DELETE" });
+      refresh();
+    } else {
+      e.target.dataset.confirmed = "1";
+      e.target.textContent = "Confirm?";
+      setTimeout(() => {
+        e.target.dataset.confirmed = "";
+        e.target.textContent = "Delete";
+      }, 3000);
+    }
+  }
+});
+
+document.getElementById("grid").addEventListener("change", async (e) => {
+  const id = e.target.dataset.toggle;
+  if (!id) return;
+  await api(`/api/jobs/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled: e.target.checked }),
+  });
+  refresh();
+});
+
+function fmtDuration(ms) {
+  if (ms == null) return "-";
+  if (ms < 1000) return ms + "ms";
+  const s = ms / 1000;
+  if (s < 60) return s.toFixed(1) + "s";
+  return Math.floor(s / 60) + "m " + Math.round(s % 60) + "s";
+}
+
+function fmtAbs(iso) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+}
+
+async function openLog(id) {
+  const overlay = document.getElementById("log-overlay");
+  const body = document.getElementById("log-body");
+  const title = document.getElementById("log-title");
+  title.textContent = "Last run log";
+  body.innerHTML = "loading...";
+  overlay.classList.add("open");
+  const data = await api(`/api/jobs/${encodeURIComponent(id)}/log`);
+  if (!data.log) {
+    body.innerHTML = "no log yet";
+    return;
+  }
+  const l = data.log;
+  title.textContent = `Run log - ${id}`;
+
+  let parsed = null;
+  try { parsed = JSON.parse(l.stdout); } catch {}
+
+  const stats = [
+    { label: "status", value: l.status, cls: l.status === "success" ? "status-success" : "status-failed" },
+    { label: "duration", value: fmtDuration(l.durationMs) },
+    { label: "started", value: fmtAbs(l.startedAt) },
+  ];
+  if (parsed?.total_cost_usd != null) stats.push({ label: "cost", value: "$" + parsed.total_cost_usd.toFixed(3) });
+  if (parsed?.usage) {
+    const u = parsed.usage;
+    const totalTokens = (u.input_tokens || 0) + (u.output_tokens || 0) + (u.cache_read_input_tokens || 0);
+    if (totalTokens) stats.push({ label: "tokens", value: totalTokens.toLocaleString() });
+  }
+
+  let html = '<div class="log-meta">' + stats.map((s) =>
+    `<div class="stat${s.cls ? " " + s.cls : ""}"><div class="label">${escapeHtml(s.label)}</div><div class="value">${escapeHtml(String(s.value))}</div></div>`
+  ).join("") + "</div>";
+
+  if (l.errorMsg) {
+    html += `<div class="log-error-box">${escapeHtml(l.errorMsg)}</div>`;
+  }
+
+  if (parsed?.result) {
+    html += '<div class="log-section-title">Output</div>';
+    html += `<div class="log-result">${escapeHtml(parsed.result)}</div>`;
+  }
+
+  html += `<details class="log-raw"><summary>raw stdout / stderr</summary>` +
+    `<div class="log-pre">${escapeHtml(l.stdout || "(empty)")}${l.stderr ? "\n\n--- stderr ---\n" + escapeHtml(l.stderr) : ""}</div></details>`;
+
+  body.innerHTML = html;
+}
+document.getElementById("log-close").onclick = () =>
+  document.getElementById("log-overlay").classList.remove("open");
+
+function openAdd() {
+  state.editingId = null;
+  document.getElementById("job-modal-title").textContent = "Add job";
+  for (const id of ["f-name", "f-desc", "f-schedule", "f-cwd", "f-context", "f-prompt", "f-output-path"])
+    document.getElementById(id).value = "";
+  document.getElementById("f-cwd").value = state.jobs[0]?.cwd || "";
+  document.getElementById("f-output-mode").value = "none";
+  document.getElementById("f-timeout").value = 10;
+  document.getElementById("f-enabled").value = "true";
+  document.getElementById("job-error").textContent = "";
+  document.getElementById("job-overlay").classList.add("open");
+}
+
+function openEdit(id) {
+  const job = state.jobs.find((j) => j.id === id);
+  if (!job) return;
+  state.editingId = id;
+  document.getElementById("job-modal-title").textContent = "Edit job";
+  document.getElementById("f-name").value = job.name;
+  document.getElementById("f-desc").value = job.description || "";
+  document.getElementById("f-schedule").value = job.schedule;
+  document.getElementById("f-cwd").value = job.cwd;
+  document.getElementById("f-context").value = (job.context_files || []).join("\n");
+  document.getElementById("f-prompt").value = job.prompt;
+  document.getElementById("f-output-mode").value = job.output?.mode || "none";
+  document.getElementById("f-output-path").value = job.output?.path || "";
+  document.getElementById("f-timeout").value = Math.round((job.timeoutMs || 600000) / 60000);
+  document.getElementById("f-enabled").value = String(job.enabled);
+  document.getElementById("job-error").textContent = "";
+  document.getElementById("job-overlay").classList.add("open");
+}
+
+document.getElementById("add-btn").onclick = openAdd;
+document.getElementById("job-cancel").onclick = () =>
+  document.getElementById("job-overlay").classList.remove("open");
+
+document.querySelectorAll(".presets button").forEach((btn) => {
+  btn.onclick = () => (document.getElementById("f-schedule").value = btn.dataset.cron);
+});
+
+document.getElementById("job-save").onclick = async () => {
+  const payload = {
+    provider: CURRENT_PROVIDER,
+    name: document.getElementById("f-name").value.trim(),
+    description: document.getElementById("f-desc").value.trim(),
+    schedule: document.getElementById("f-schedule").value.trim(),
+    cwd: document.getElementById("f-cwd").value.trim(),
+    prompt: document.getElementById("f-prompt").value,
+    context_files: document.getElementById("f-context").value
+      .split("\n").map((s) => s.trim()).filter(Boolean),
+    output: {
+      mode: document.getElementById("f-output-mode").value,
+      path: document.getElementById("f-output-path").value.trim(),
+    },
+    timeoutMs: Number(document.getElementById("f-timeout").value) * 60000,
+    enabled: document.getElementById("f-enabled").value === "true",
+  };
+  const errEl = document.getElementById("job-error");
+  errEl.textContent = "";
+  try {
+    if (state.editingId) {
+      await api(`/api/jobs/${encodeURIComponent(state.editingId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    document.getElementById("job-overlay").classList.remove("open");
+    refresh();
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+};
+
+let pm2Reachable = null;
+
+async function checkHealth() {
+  const pill = document.getElementById("pm2-daemon-pill");
+  if (pill.dataset.confirming) return; // don't clobber the "confirm stop?" state mid-poll
+  try {
+    const health = await api("/api/health");
+    pm2Reachable = health.pm2.reachable;
+    document.getElementById("auth-banner").classList.toggle("show", !health.claudeAuth.loggedIn);
+    document.getElementById("pm2-banner").classList.toggle("show", !health.pm2.reachable);
+    if (health.pm2.reachable) {
+      pill.className = "status-pill success";
+      pill.title = "click to stop the pm2 daemon";
+      pill.innerHTML = `<span class="dot"></span>pm2 daemon: online${health.pm2.version ? " v" + health.pm2.version : ""}${health.pm2.pid ? " (pid " + health.pm2.pid + ")" : ""}`;
+    } else {
+      pill.className = "status-pill failed";
+      pill.title = "run pm2 resurrect in a Terminal to bring it back";
+      pill.innerHTML = '<span class="dot"></span>pm2 daemon: unreachable';
+    }
+  } catch {
+    pm2Reachable = false;
+    document.getElementById("pm2-banner").classList.add("show");
+    pill.className = "status-pill failed";
+    pill.title = "run pm2 resurrect in a Terminal to bring it back";
+    pill.innerHTML = '<span class="dot"></span>pm2 daemon: unknown (dashboard unreachable)';
+  }
+}
+
+document.getElementById("pm2-daemon-pill").addEventListener("click", async (e) => {
+  const pill = e.currentTarget;
+  if (!pm2Reachable) return; // nothing this page can do while its own server is down
+
+  if (!pill.dataset.confirming) {
+    pill.dataset.confirming = "1";
+    pill.className = "status-pill failed";
+    pill.innerHTML = '<span class="dot"></span>Stop pm2 daemon? This also stops this dashboard. Click again to confirm.';
+    setTimeout(() => {
+      if (pill.dataset.confirming) {
+        delete pill.dataset.confirming;
+        checkHealth();
+      }
+    }, 5000);
+    return;
+  }
+
+  delete pill.dataset.confirming;
+  pill.innerHTML = '<span class="dot"></span>stopping pm2 (this page will stop responding)...';
+  // Calls the watchdog directly, not this dashboard's own API - the dashboard
+  // dies along with the daemon it's killing, so it can't be the one to verify
+  // the kill actually completed (pm2's own kill can silently hang - see the
+  // watchdog's /stop handler for why). The watchdog survives and checks.
+  await fetch("http://localhost:47891/stop", { method: "POST" }).catch(() => {});
+});
+
+document.getElementById("auth-connect-btn").onclick = async (e) => {
+  e.target.textContent = "opening Terminal...";
+  e.target.disabled = true;
+  try {
+    await api("/api/auth/connect", { method: "POST" });
+    e.target.textContent = "check the Terminal window";
+  } catch (err) {
+    e.target.textContent = "Connect";
+    e.target.disabled = false;
+    alert(err.message);
+  }
+  setTimeout(() => {
+    e.target.textContent = "Connect";
+    e.target.disabled = false;
+  }, 8000);
+};
+
+renderProviderTabs();
+refresh();
+checkHealth();
+setInterval(refresh, 5000);
+setInterval(checkHealth, 15000);
+</script>
+
+</body>
+</html>

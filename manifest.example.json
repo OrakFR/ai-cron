@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "example-weekly-summary",
+      "name": "Example weekly summary",
+      "provider": "claude",
+      "description": "Sample job - copy this file to manifest.json and edit freely. The dashboard's Add Job form can also create/edit jobs directly.",
+      "schedule": "0 8 * * 1",
+      "cwd": "/absolute/path/to/your/project",
+      "prompt": "Summarize what changed in this project this week and suggest next steps.",
+      "context_files": [],
+      "output": { "mode": "append_log", "path": "ai-cron-output.md" },
+      "timeoutMs": 600000,
+      "enabled": false,
+      "lastRun": null
+    }
+  ]
+}
