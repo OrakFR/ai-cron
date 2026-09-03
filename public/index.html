@@ -185,7 +185,7 @@
 </div>
 
 <div class="banner warn" id="auth-banner">
-  <span>Claude CLI not connected - scheduled jobs will fail until you log in.</span>
+  <span id="auth-banner-text"></span>
   <button class="primary" id="auth-connect-btn">Connect</button>
 </div>
 <div class="banner warn" id="pm2-banner">
@@ -619,13 +619,33 @@ document.getElementById("job-save").onclick = async () => {
 
 let pm2Reachable = null;
 
+function renderAuthBanner(health) {
+  const banner = document.getElementById("auth-banner");
+  const text = document.getElementById("auth-banner-text");
+  if (CURRENT_PROVIDER === "claude") {
+    banner.classList.toggle("show", !health.claudeAuth.loggedIn);
+    text.textContent = "Claude CLI not connected - scheduled jobs will fail until you log in.";
+    return;
+  }
+  if (CURRENT_PROVIDER === "chatgpt") {
+    const auth = health.chatgptAuth;
+    const connected = auth.loggedIn || auth.apiKeySet;
+    banner.classList.toggle("show", !connected);
+    text.textContent = auth.installed
+      ? "Codex CLI installed but not logged in - scheduled jobs will fail until you connect."
+      : "Codex CLI not found and OPENAI_API_KEY not set - install Codex (uses your ChatGPT plan) or set an API key.";
+    return;
+  }
+  banner.classList.remove("show");
+}
+
 async function checkHealth() {
   const pill = document.getElementById("pm2-daemon-pill");
   if (pill.dataset.confirming) return; // don't clobber the "confirm stop?" state mid-poll
   try {
     const health = await api("/api/health");
     pm2Reachable = health.pm2.reachable;
-    document.getElementById("auth-banner").classList.toggle("show", !health.claudeAuth.loggedIn);
+    renderAuthBanner(health);
     document.getElementById("pm2-banner").classList.toggle("show", !health.pm2.reachable);
     if (health.pm2.reachable) {
       pill.className = "status-pill success";
@@ -675,7 +695,7 @@ document.getElementById("auth-connect-btn").onclick = async (e) => {
   e.target.textContent = "opening Terminal...";
   e.target.disabled = true;
   try {
-    await api("/api/auth/connect", { method: "POST" });
+    await api(`/api/auth/connect?provider=${encodeURIComponent(CURRENT_PROVIDER)}`, { method: "POST" });
     e.target.textContent = "check the Terminal window";
   } catch (err) {
     e.target.textContent = "Connect";

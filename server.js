@@ -185,6 +185,27 @@ function claudeAuthStatus() {
   }
 }
 
+function chatgptAuthStatus() {
+  const apiKeySet = !!process.env.OPENAI_API_KEY;
+  const proc = spawnSync("codex", ["login", "status"], {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  if (proc.error) {
+    // ENOENT (codex not installed) or anything else - the API key fallback
+    // can still make the provider usable even with no Codex CLI present.
+    return { installed: false, loggedIn: false, apiKeySet, detail: apiKeySet ? "using OPENAI_API_KEY" : null };
+  }
+  // codex prints this to stderr, not stdout.
+  const loggedIn = proc.status === 0 && /logged in/i.test(`${proc.stdout || ""}${proc.stderr || ""}`);
+  return {
+    installed: true,
+    loggedIn,
+    apiKeySet,
+    detail: (proc.stdout || proc.stderr || "").trim() || null,
+  };
+}
+
 function slugify(name) {
   return (
     name
@@ -291,19 +312,24 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/health") {
       return send(res, 200, {
         claudeAuth: claudeAuthStatus(),
+        chatgptAuth: chatgptAuthStatus(),
         pm2: pm2DaemonInfo(),
       });
     }
 
     if (req.method === "POST" && url.pathname === "/api/auth/connect") {
-      const script = 'tell application "Terminal" to do script "claude auth login"';
+      const provider = PROVIDERS[url.searchParams.get("provider")]
+        ? url.searchParams.get("provider")
+        : "claude";
+      const command = provider === "chatgpt" ? "codex login" : "claude auth login";
+      const script = `tell application "Terminal" to do script "${command}"`;
       const proc = spawnSync("osascript", ["-e", script], { encoding: "utf8" });
       if (proc.error || proc.status !== 0) {
         return send(res, 500, {
           error: "could not open Terminal: " + (proc.error?.message || proc.stderr),
         });
       }
-      return send(res, 200, { opened: true });
+      return send(res, 200, { opened: true, command });
     }
 
     const pm2SyncMatch = url.pathname.match(/^\/api\/jobs\/([^/]+)\/pm2-sync$/);
