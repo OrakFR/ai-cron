@@ -257,6 +257,10 @@
         </select>
       </div>
     </div>
+    <div class="field">
+      <label>Model (optional)</label>
+      <input id="f-model" placeholder="claude: alias like sonnet, or blank for default. chatgpt: e.g. gpt-4o-mini">
+    </div>
     <div class="error-text" id="job-error"></div>
     <div class="modal-actions">
       <button id="job-cancel">Cancel</button>
@@ -281,7 +285,7 @@ const state = { jobs: [], editingId: null, providers: {} };
 
 const PROVIDER_SUBTITLES = {
   claude: 'scheduled <code>claude -p</code> jobs, run via pm2',
-  chatgpt: 'scheduled ChatGPT jobs, run via pm2 - no executor wired up yet',
+  chatgpt: 'scheduled ChatGPT jobs, run via pm2 - needs <code>OPENAI_API_KEY</code> set',
 };
 document.getElementById("sub-text").innerHTML =
   PROVIDER_SUBTITLES[CURRENT_PROVIDER] || `scheduled ${escapeHtml(CURRENT_PROVIDER)} jobs, run via pm2`;
@@ -381,6 +385,7 @@ function renderJobs() {
       <div class="meta">
         <span>cron <b>${escapeHtml(job.schedule)}</b></span>
         <span>cwd <b>${escapeHtml(shortenPath(job.cwd))}</b></span>
+        ${job.model ? `<span>model <b>${escapeHtml(job.model)}</b></span>` : ""}
         ${job.lastRun && job.lastRun.costUsd != null ? `<span>cost <b>$${job.lastRun.costUsd.toFixed(3)}</b></span>` : ""}
       </div>
       <div class="meta">
@@ -533,7 +538,7 @@ document.getElementById("log-close").onclick = () =>
 function openAdd() {
   state.editingId = null;
   document.getElementById("job-modal-title").textContent = "Add job";
-  for (const id of ["f-name", "f-desc", "f-schedule", "f-cwd", "f-context", "f-prompt", "f-output-path"])
+  for (const id of ["f-name", "f-desc", "f-schedule", "f-cwd", "f-context", "f-prompt", "f-output-path", "f-model"])
     document.getElementById(id).value = "";
   document.getElementById("f-cwd").value = state.jobs[0]?.cwd || "";
   document.getElementById("f-output-mode").value = "none";
@@ -558,6 +563,7 @@ function openEdit(id) {
   document.getElementById("f-output-path").value = job.output?.path || "";
   document.getElementById("f-timeout").value = Math.round((job.timeoutMs || 600000) / 60000);
   document.getElementById("f-enabled").value = String(job.enabled);
+  document.getElementById("f-model").value = job.model || "";
   document.getElementById("job-error").textContent = "";
   document.getElementById("job-overlay").classList.add("open");
 }
@@ -586,6 +592,7 @@ document.getElementById("job-save").onclick = async () => {
     },
     timeoutMs: Number(document.getElementById("f-timeout").value) * 60000,
     enabled: document.getElementById("f-enabled").value === "true",
+    model: document.getElementById("f-model").value.trim(),
   };
   const errEl = document.getElementById("job-error");
   errEl.textContent = "";

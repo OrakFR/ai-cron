@@ -15,12 +15,11 @@ const RUNNER_PATH = path.join(__dirname, "runner.js");
 const LOGS_DIR = path.join(__dirname, "logs");
 const INDEX_HTML = path.join(__dirname, "public", "index.html");
 
-// One page per AI, sharing the same template - runner.js only knows how to
-// execute "claude" jobs today; chatgpt is scaffolded with no jobs and no
-// executor yet.
+// One page per AI, sharing the same template. runner.js's EXECUTORS map
+// decides what's actually runnable - keep this in sync with that.
 const PROVIDERS = {
   claude: { name: "Claude", ready: true },
-  chatgpt: { name: "ChatGPT", ready: false },
+  chatgpt: { name: "ChatGPT", ready: true },
 };
 const DEFAULT_PROVIDER = "claude";
 
@@ -334,6 +333,7 @@ const server = http.createServer(async (req, res) => {
         id,
         name: body.name,
         provider,
+        model: body.model || "",
         description: body.description || "",
         schedule: body.schedule,
         cwd: body.cwd,
@@ -369,6 +369,7 @@ const server = http.createServer(async (req, res) => {
         const job = manifest.jobs[idx];
         Object.assign(job, {
           name: body.name ?? job.name,
+          model: body.model ?? job.model,
           description: body.description ?? job.description,
           schedule: body.schedule ?? job.schedule,
           cwd: body.cwd ?? job.cwd,
