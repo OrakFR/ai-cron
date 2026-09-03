@@ -8,6 +8,8 @@ schedule (a deliberate, reasonable security call on their part - a "no API calls
 quietly calling out to one was a real trust gap). This replaces that one narrow feature
 with something small, dependency-free, and easy to reason about.
 
+![Dashboard](docs/dashboard.png)
+
 ## How it's laid out
 
 - **`manifest.json`** - the list of jobs: schedule (5-field cron), prompt, context files
@@ -71,6 +73,13 @@ No external dependencies - everything runs on Node's built-in `http`/`fs`/`child
 `runner.js` currently only knows how to run `claude -p`. To wire up another provider:
 add its key to `PROVIDERS` in `server.js` (`ready: true`), and branch on `job.provider`
 in `runner.js`'s `run()` function to call that provider's CLI instead.
+
+## Roadmap
+
+Claude is the only provider with a real executor today. The dashboard is already
+multi-provider (a page per AI, `/claude` + `/chatgpt`, filtered by a `provider` field
+on each job) - ChatGPT is scaffolded and shows up as "not wired up" until it gets one.
+Support for other AI models (ChatGPT and others) is planned for a future version.
 
 ## License
 
